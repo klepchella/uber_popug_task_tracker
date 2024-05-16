@@ -1,0 +1,10 @@
+.idea
+__pycache__
+test_app/__pycache__/*
+.ruff_cache
+.DS_Store
+*.pyc
+tests-report.xml
+venv/
+local.env
+/test_app/
