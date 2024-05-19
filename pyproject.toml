@@ -23,7 +23,7 @@ python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 aiopg = {version = "^1.4.0", extras = ["sa"]}
 ipdb = "^0.13.13"
 passlib = {version = "^1.7.4", extras = ["bcrypt"]}
-bcrypt = "4.0.1"
+bcrypt = "4.0.1"  # не обновлять!
 
 
 [build-system]

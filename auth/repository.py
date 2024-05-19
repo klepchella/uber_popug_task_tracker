@@ -1,5 +1,6 @@
 import abc
 import uuid
+from datetime import timedelta, datetime, timezone
 from typing import TypeVar, Sequence, Generic, Annotated
 
 from fastapi import Depends, HTTPException
@@ -17,8 +18,8 @@ from auth.security import (
     TokenData,
     verify_password,
 )
-from auth.tables import user
-from auth.types import User
+from auth.tables import user, oauth_token
+from auth.types import User, Token, TOKEN_TYPE
 
 ModelT = TypeVar("ModelT")
 
@@ -87,8 +88,8 @@ class UserRepository(BaseRepository):
             role=role,
             public_id=uuid.uuid4(),
         )
-        with self._session.begin():
-            self._session.execute(query)
+        # with self._session.begin():
+        self._session.execute(query)
 
     def update_user(
         self,
@@ -119,6 +120,24 @@ class UserRepository(BaseRepository):
             self._session.execute(query)
 
 
+class TokenRepository(BaseRepository):
+    table = oauth_token
+    model_cls = Token
+
+    def create_token(
+        self, user_id: int, data: dict, expires_delta: timedelta | None = None
+    ) -> Token | None:
+        token = create_access_token(data, expires_delta)
+        query = insert(self.table).values(
+            user_id=user_id,
+            token=token,
+            token_type=TOKEN_TYPE,
+        )
+        self._session.execute(query)
+        self._session.commit()
+        return Token(token=token, token_type=TOKEN_TYPE, user_id=user_id)
+
+
 def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     user_repository: UserRepository,
@@ -133,7 +152,7 @@ def get_current_user(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)  # todo
+        token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
     user = user_repository.find_user_by_user_name(username)
@@ -149,3 +168,14 @@ def authenticate_user(user_repository: UserRepository, username: str, password: 
     if not verify_password(password, user.password):
         return False
     return user
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt

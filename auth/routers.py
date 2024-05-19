@@ -1,4 +1,3 @@
-import uuid
 from datetime import timedelta
 from typing import Annotated
 
@@ -8,14 +7,18 @@ from pydantic import PositiveInt
 from starlette.requests import Request
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_200_OK
 
-from auth.dependencies import get_user_repository
-from auth.repository import UserRepository, authenticate_user
+from auth.dependencies import get_user_repository, get_token_repository
+from auth.repository import (
+    UserRepository,
+    authenticate_user,
+    TokenRepository,
+    create_access_token,
+)
 from auth.security import (
     Token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
-    create_access_token,
 )
-from auth.types import RoleEnum
+from auth.types import RoleEnum, TOKEN_TYPE
 
 api_router = APIRouter()
 
@@ -24,6 +27,7 @@ api_router = APIRouter()
 def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
+    token_repository: Annotated[TokenRepository, Depends(get_token_repository)],
 ) -> Token:
     user = authenticate_user(user_repository, form_data.username, form_data.password)
     if not user:
@@ -33,10 +37,10 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+    access_token = token_repository.create_token(
+        user_id=user.id, data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(access_token=access_token.token, token_type=access_token.token_type)
 
 
 @api_router.post("/create")
