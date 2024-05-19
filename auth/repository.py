@@ -90,6 +90,7 @@ class UserRepository(BaseRepository):
         )
         # with self._session.begin():
         self._session.execute(query)
+        self._session.commit()
 
     def update_user(
         self,
@@ -111,16 +112,18 @@ class UserRepository(BaseRepository):
                 role=role,
             )
         )
-        with self._session.begin():
-            self._session.execute(query)
+        # with self._session.begin():
+        self._session.execute(query)
+        self._session.commit()
 
     def delete_user(self, user_id: int) -> None:
         query = delete(self.table).where(self.table.c.id == user_id)
-        with self._session.begin():
-            self._session.execute(query)
+        # with self._session.begin():
+        self._session.execute(query)
+        self._session.commit()
 
 
-class TokenRepository(BaseRepository):
+class AuthRepository(BaseRepository):
     table = oauth_token
     model_cls = Token
 
@@ -136,6 +139,21 @@ class TokenRepository(BaseRepository):
         self._session.execute(query)
         self._session.commit()
         return Token(token=token, token_type=TOKEN_TYPE, user_id=user_id)
+
+    def is_verify_token(self, user_id: int, token: str) -> bool:
+        query = (
+            select(
+                self.table.c.user_id,
+                self.table.c.token,
+                self.table.c.token_type,
+            )
+            .select_from(self.table)
+            .where(self.table.c.user_id == user_id, self.table.c.token == token)
+        )
+        result = self._get_from_query(query)
+        if len(result) == 0:
+            return False
+        return True
 
 
 def get_current_user(

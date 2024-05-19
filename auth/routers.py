@@ -7,18 +7,17 @@ from pydantic import PositiveInt
 from starlette.requests import Request
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_200_OK
 
-from auth.dependencies import get_user_repository, get_token_repository
+from auth.dependencies import get_user_repository, get_auth_repository
 from auth.repository import (
     UserRepository,
     authenticate_user,
-    TokenRepository,
-    create_access_token,
+    AuthRepository,
 )
 from auth.security import (
     Token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
-from auth.types import RoleEnum, TOKEN_TYPE
+from auth.types import RoleEnum
 
 api_router = APIRouter()
 
@@ -27,7 +26,7 @@ api_router = APIRouter()
 def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
-    token_repository: Annotated[TokenRepository, Depends(get_token_repository)],
+    token_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
 ) -> Token:
     user = authenticate_user(user_repository, form_data.username, form_data.password)
     if not user:
@@ -70,6 +69,8 @@ def create_user(
 def update_user(
     request: Request,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
+auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+        token: str,
     user_id: int,
     username: str | None = None,
     role: int | None = RoleEnum.CLIENT,
@@ -77,7 +78,13 @@ def update_user(
     last_name: str | None = None,
     email: str | None = None,
 ) -> PositiveInt:
-    # todo: добавить валидацию
+    if not auth_repository.is_verify_token(user_id=user_id, token=token):
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # todo: добавить валидацию на юзера
     user_repository.update_user(
         user_id=user_id,
         username=username,
@@ -93,8 +100,16 @@ def update_user(
 def delete_user(
     request: Request,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
+    auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+    token: str,
     user_id: int,
 ) -> PositiveInt:
+    if not auth_repository.is_verify_token(user_id=user_id, token=token):
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     # todo: добавить валидацию
     user_repository.delete_user(
         user_id=user_id,

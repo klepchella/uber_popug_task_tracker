@@ -1,6 +1,4 @@
-import datetime
-
-from sqlalchemy import Table, Column, Integer, String, ForeignKey, DATETIME
+from sqlalchemy import Table, Column, Integer, String, ForeignKey
 from sqlalchemy import UUID
 
 from auth.database import metadata
