@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 from typing import Annotated
 
@@ -17,7 +18,6 @@ from auth.security import (
     Token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
-from auth.types import RoleEnum
 
 api_router = APIRouter()
 
@@ -51,7 +51,7 @@ def create_user(
     password: str,
     first_name: str,
     last_name: str,
-    role: int = RoleEnum.CLIENT,
+    role: int,
 ) -> PositiveInt:
     # todo: добавить валидацию при сохрании, сейчас считаем, что у нас всегда добавляется юзер, которого нет в БД
     user_repository.create_user(
@@ -69,11 +69,11 @@ def create_user(
 def update_user(
     request: Request,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
-auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
-        token: str,
+    auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+    token: str,
     user_id: int,
     username: str | None = None,
-    role: int | None = RoleEnum.CLIENT,
+    role: int | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
@@ -102,9 +102,11 @@ def delete_user(
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
     auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
     token: str,
-    user_id: int,
+    user_id: uuid.UUID,
 ) -> PositiveInt:
-    if not auth_repository.is_verify_token(user_id=user_id, token=token):
+    if not auth_repository.is_verify_token_by_public_id(
+        public_user_id=user_id, token=token
+    ):
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -112,6 +114,6 @@ def delete_user(
         )
     # todo: добавить валидацию
     user_repository.delete_user(
-        user_id=user_id,
+        public_user_id=user_id,
     )
     return HTTP_200_OK

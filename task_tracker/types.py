@@ -1,13 +1,11 @@
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
 
-TOKEN_TYPE = "bearer"
-
 
 class User(BaseModel):
     id: int
-    password: str
     username: str
     first_name: str | None = None
     last_name: str | None = None
@@ -16,7 +14,16 @@ class User(BaseModel):
     role: int
 
 
-class Token(BaseModel):
+class Task(BaseModel):
+    id: int
     user_id: int
-    token: str
-    token_type: str
+    cost: Decimal
+    status: str
+    description: str
+
+
+class Payment(BaseModel):
+    id: int
+    task_id: int
+    user_id: int
+    summa: Decimal
