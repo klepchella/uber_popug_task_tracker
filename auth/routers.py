@@ -6,7 +6,7 @@ from fastapi import Depends, APIRouter, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import PositiveInt
 from starlette.requests import Request
-from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_200_OK
+from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_200_OK, HTTP_403_FORBIDDEN
 
 from auth.dependencies import get_user_repository, get_auth_repository
 from auth.repository import (
@@ -40,6 +40,25 @@ def login_for_access_token(
         user_id=user.id, data={"sub": user.username}, expires_delta=access_token_expires
     )
     return Token(access_token=access_token.token, token_type=access_token.token_type)
+
+
+@api_router.get("/check")
+def check_auth_token(
+    request: Request,
+    public_user_id: uuid.UUID,
+    token: str,
+    token_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+    auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+):
+    if token_repository.is_verify_token_by_user_public_id(
+        public_user_id=public_user_id, token=token
+    ):
+        return HTTP_200_OK
+    auth_repository.check_role(public_user_id=public_user_id)
+    raise HTTPException(
+        status_code=HTTP_403_FORBIDDEN,
+        detail="Incorrect username or password",
+    )
 
 
 @api_router.post("/create")
@@ -104,7 +123,7 @@ def delete_user(
     token: str,
     user_id: uuid.UUID,
 ) -> PositiveInt:
-    if not auth_repository.is_verify_token_by_public_id(
+    if not auth_repository.is_verify_token_by_user_public_id(
         public_user_id=user_id, token=token
     ):
         raise HTTPException(

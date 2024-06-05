@@ -60,7 +60,7 @@ class UserRepository(BaseRepository):
                 self.table.c.first_name,
                 self.table.c.last_name,
                 self.table.c.email,
-                self.table.c.public_id,
+                self.table.c.user_public_id,
                 self.table.c.role,
             )
             .select_from(self.table)
@@ -87,16 +87,14 @@ class UserRepository(BaseRepository):
             "last_name": last_name,
             "email": email,
             "role": role,
-            "public_id": uuid.uuid4(),
+            "user_public_id": uuid.uuid4(),
         }
         query = insert(self.table).values(password=password_hash, **values)
 
         try:
             self._session.execute(query)
             self._session.commit()
-            # import ipdb
-            # ipdb.set_trace()
-            values["public_id"] = str(values["public_id"])
+            values["user_public_id"] = str(values["user_public_id"])
             producer.send("account", key=b"create", value=json.dumps(values).encode())
         except Exception as e:
             self._session.rollback()
@@ -123,11 +121,11 @@ class UserRepository(BaseRepository):
 
         self._session.execute(query)
         self._session.commit()
-        values["public_id"] = str(user.public_id)
+        values["user_public_id"] = str(user.user_public_id)
         producer.send("account", key=b"update", value=json.dumps(values).encode())
 
     def delete_user(self, public_user_id: uuid.UUID) -> None:
-        query = delete(self.table).where(self.table.c.public_id == public_user_id)
+        query = delete(self.table).where(self.table.c.user_public_id == public_user_id)
 
         self._session.execute(query)
         self._session.commit()
@@ -170,13 +168,15 @@ class AuthRepository(BaseRepository):
             return False
         return True
 
-    def is_verify_token_by_public_id(
+    def is_verify_token_by_user_public_id(
         self, public_user_id: uuid.UUID, token: str
     ) -> bool:
         query = (
-            select(self.table, account.c.public_id)
+            select(self.table, account.c.user_public_id)
             .join(account, account.c.id == self.table.c.user_id, isouter=True)
-            .where(account.c.public_id == public_user_id, self.table.c.token == token)
+            .where(
+                account.c.user_public_id == public_user_id, self.table.c.token == token
+            )
         )
         result = self._get_from_query(query)
         if len(result) == 0:

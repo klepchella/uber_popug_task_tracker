@@ -1,3 +1,4 @@
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -12,7 +13,7 @@ class User(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     email: str | None = None
-    public_id: UUID
+    user_public_id: UUID
     role: int
 
 

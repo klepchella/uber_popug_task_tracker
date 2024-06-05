@@ -1,8 +1,8 @@
 """initial
 
-Revision ID: faae0bdaeea2
+Revision ID: e3c4c3816a9f
 Revises: 
-Create Date: 2024-05-20 19:46:05.121515
+Create Date: 2024-05-30 19:16:58.001011
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "faae0bdaeea2"
+revision: str = "e3c4c3816a9f"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -27,38 +27,37 @@ def upgrade() -> None:
         sa.Column("first_name", sa.String(), nullable=True),
         sa.Column("last_name", sa.String(), nullable=True),
         sa.Column("email", sa.String(), nullable=True),
-        sa.Column("public_id", sa.UUID(), nullable=False),
+        sa.Column("user_public_id", sa.UUID(), nullable=False),
         sa.Column("role", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("public_id"),
+        sa.UniqueConstraint("user_public_id"),
         sa.UniqueConstraint("username"),
     )
     op.create_table(
         "task",
         sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("task_public_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("cost", sa.DECIMAL(), nullable=False),
         sa.Column("status", sa.Integer(), nullable=True),
         sa.Column("description", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["account.public_id"],
+            ["user_id"], ["account.user_public_id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("task_public_id"),
     )
     op.create_table(
         "payment",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("task_id", sa.Integer(), nullable=False),
+        sa.Column("task_public_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("summa", sa.DECIMAL(), nullable=True),
         sa.ForeignKeyConstraint(
-            ["task_id"],
-            ["task.id"],
+            ["task_public_id"], ["task.task_public_id"], ondelete="CASCADE"
         ),
         sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["account.public_id"],
+            ["user_id"], ["account.user_public_id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
     )

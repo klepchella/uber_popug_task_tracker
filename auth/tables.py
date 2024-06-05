@@ -12,7 +12,7 @@ account = Table(
     Column("first_name", String, nullable=True),
     Column("last_name", String, nullable=True),
     Column("email", String, nullable=True),
-    Column("public_id", UUID, nullable=False, unique=True),
+    Column("user_public_id", UUID, nullable=False, unique=True),
     Column("role", ForeignKey("role.id"), nullable=False),
 )
 
