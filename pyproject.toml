@@ -24,6 +24,9 @@ aiopg = {version = "^1.4.0", extras = ["sa"]}
 ipdb = "^0.13.13"
 passlib = {version = "^1.7.4", extras = ["bcrypt"]}
 bcrypt = "4.0.1"  # не обновлять!
+kafka-python = "^2.0.2"
+requests = "^2.32.2"
+itsdangerous = "^2.2.0"
 
 
 [build-system]

@@ -7,5 +7,5 @@ test_app/__pycache__/*
 *.pyc
 tests-report.xml
 venv/
-local.env
 /test_app/
+*.env

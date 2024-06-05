@@ -2,7 +2,7 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from auth.database import session as db_session
-from auth.repository import UserRepository, TokenRepository
+from auth.repository import UserRepository, AuthRepository
 
 
 def get_session():
@@ -19,7 +19,7 @@ def get_user_repository(
     return UserRepository(session)
 
 
-def get_token_repository(
+def get_auth_repository(
     request: Request, session: Session = Depends(get_session)
-) -> TokenRepository:
-    return TokenRepository(session)
+) -> AuthRepository:
+    return AuthRepository(session)

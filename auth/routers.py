@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 from typing import Annotated
 
@@ -5,20 +6,18 @@ from fastapi import Depends, APIRouter, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import PositiveInt
 from starlette.requests import Request
-from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_200_OK
+from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_200_OK, HTTP_403_FORBIDDEN
 
-from auth.dependencies import get_user_repository, get_token_repository
+from auth.dependencies import get_user_repository, get_auth_repository
 from auth.repository import (
     UserRepository,
     authenticate_user,
-    TokenRepository,
-    create_access_token,
+    AuthRepository,
 )
 from auth.security import (
     Token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
-from auth.types import RoleEnum, TOKEN_TYPE
 
 api_router = APIRouter()
 
@@ -27,7 +26,7 @@ api_router = APIRouter()
 def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
-    token_repository: Annotated[TokenRepository, Depends(get_token_repository)],
+    token_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
 ) -> Token:
     user = authenticate_user(user_repository, form_data.username, form_data.password)
     if not user:
@@ -43,6 +42,25 @@ def login_for_access_token(
     return Token(access_token=access_token.token, token_type=access_token.token_type)
 
 
+@api_router.get("/check")
+def check_auth_token(
+    request: Request,
+    public_user_id: uuid.UUID,
+    token: str,
+    token_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+    auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+):
+    if token_repository.is_verify_token_by_user_public_id(
+        public_user_id=public_user_id, token=token
+    ):
+        return HTTP_200_OK
+    auth_repository.check_role(public_user_id=public_user_id)
+    raise HTTPException(
+        status_code=HTTP_403_FORBIDDEN,
+        detail="Incorrect username or password",
+    )
+
+
 @api_router.post("/create")
 def create_user(
     request: Request,
@@ -52,7 +70,7 @@ def create_user(
     password: str,
     first_name: str,
     last_name: str,
-    role: int = RoleEnum.CLIENT,
+    role: int,
 ) -> PositiveInt:
     # todo: добавить валидацию при сохрании, сейчас считаем, что у нас всегда добавляется юзер, которого нет в БД
     user_repository.create_user(
@@ -70,14 +88,22 @@ def create_user(
 def update_user(
     request: Request,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
+    auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+    token: str,
     user_id: int,
     username: str | None = None,
-    role: int | None = RoleEnum.CLIENT,
+    role: int | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
 ) -> PositiveInt:
-    # todo: добавить валидацию
+    if not auth_repository.is_verify_token(user_id=user_id, token=token):
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # todo: добавить валидацию на юзера
     user_repository.update_user(
         user_id=user_id,
         username=username,
@@ -93,10 +119,20 @@ def update_user(
 def delete_user(
     request: Request,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
-    user_id: int,
+    auth_repository: Annotated[AuthRepository, Depends(get_auth_repository)],
+    token: str,
+    user_id: uuid.UUID,
 ) -> PositiveInt:
+    if not auth_repository.is_verify_token_by_user_public_id(
+        public_user_id=user_id, token=token
+    ):
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     # todo: добавить валидацию
     user_repository.delete_user(
-        user_id=user_id,
+        public_user_id=user_id,
     )
     return HTTP_200_OK

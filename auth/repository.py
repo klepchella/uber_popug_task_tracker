@@ -1,4 +1,5 @@
 import abc
+import json
 import uuid
 from datetime import timedelta, datetime, timezone
 from typing import TypeVar, Sequence, Generic, Annotated
@@ -18,8 +19,9 @@ from auth.security import (
     TokenData,
     verify_password,
 )
-from auth.tables import user, oauth_token
+from auth.tables import account, oauth_token
 from auth.types import User, Token, TOKEN_TYPE
+from auth.kafka_producer import producer
 
 ModelT = TypeVar("ModelT")
 
@@ -46,7 +48,7 @@ class BaseRepository(Generic[ModelT], abc.ABC):
 
 
 class UserRepository(BaseRepository):
-    table = user
+    table = account
     model_cls = User
 
     def find_user_by_user_name(self, username: str) -> User | None:
@@ -58,7 +60,7 @@ class UserRepository(BaseRepository):
                 self.table.c.first_name,
                 self.table.c.last_name,
                 self.table.c.email,
-                self.table.c.public_id,
+                self.table.c.user_public_id,
                 self.table.c.role,
             )
             .select_from(self.table)
@@ -79,17 +81,24 @@ class UserRepository(BaseRepository):
         email: str,
     ) -> None:
         password_hash = get_password_hash(password)
-        query = insert(self.table).values(
-            username=username,
-            password=password_hash,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            role=role,
-            public_id=uuid.uuid4(),
-        )
-        # with self._session.begin():
-        self._session.execute(query)
+        values = {
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "role": role,
+            "user_public_id": uuid.uuid4(),
+        }
+        query = insert(self.table).values(password=password_hash, **values)
+
+        try:
+            self._session.execute(query)
+            self._session.commit()
+            values["user_public_id"] = str(values["user_public_id"])
+            producer.send("account", key=b"create", value=json.dumps(values).encode())
+        except Exception as e:
+            self._session.rollback()
+            print(f"something went wrong, {e}")
 
     def update_user(
         self,
@@ -100,27 +109,34 @@ class UserRepository(BaseRepository):
         last_name: str | None = None,
         email: str | None = None,
     ) -> None:
-        query = (
-            update(self.table)
-            .where(self.table.c.id == user_id)
-            .values(
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-                role=role,
-            )
+        user = self.find_user_by_user_name(username)
+        values = {
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "role": role,
+        }
+        query = update(self.table).where(self.table.c.id == user_id).values(**values)
+
+        self._session.execute(query)
+        self._session.commit()
+        values["user_public_id"] = str(user.user_public_id)
+        producer.send("account", key=b"update", value=json.dumps(values).encode())
+
+    def delete_user(self, public_user_id: uuid.UUID) -> None:
+        query = delete(self.table).where(self.table.c.user_public_id == public_user_id)
+
+        self._session.execute(query)
+        self._session.commit()
+        producer.send(
+            "account",
+            key=b"delete",
+            value=json.dumps({"user_id": str(public_user_id)}).encode(),
         )
-        with self._session.begin():
-            self._session.execute(query)
-
-    def delete_user(self, user_id: int) -> None:
-        query = delete(self.table).where(self.table.c.id == user_id)
-        with self._session.begin():
-            self._session.execute(query)
 
 
-class TokenRepository(BaseRepository):
+class AuthRepository(BaseRepository):
     table = oauth_token
     model_cls = Token
 
@@ -136,6 +152,36 @@ class TokenRepository(BaseRepository):
         self._session.execute(query)
         self._session.commit()
         return Token(token=token, token_type=TOKEN_TYPE, user_id=user_id)
+
+    def is_verify_token(self, user_id: int, token: str) -> bool:
+        query = (
+            select(
+                self.table.c.user_id,
+                self.table.c.token,
+                self.table.c.token_type,
+            )
+            .select_from(self.table)
+            .where(self.table.c.user_id == user_id, self.table.c.token == token)
+        )
+        result = self._get_from_query(query)
+        if len(result) == 0:
+            return False
+        return True
+
+    def is_verify_token_by_user_public_id(
+        self, public_user_id: uuid.UUID, token: str
+    ) -> bool:
+        query = (
+            select(self.table, account.c.user_public_id)
+            .join(account, account.c.id == self.table.c.user_id, isouter=True)
+            .where(
+                account.c.user_public_id == public_user_id, self.table.c.token == token
+            )
+        )
+        result = self._get_from_query(query)
+        if len(result) == 0:
+            return False
+        return True
 
 
 def get_current_user(
